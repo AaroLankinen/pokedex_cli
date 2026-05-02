@@ -15,7 +15,7 @@ import (
 type cliCommand struct {
 	name        string
 	description string
-	callback    func(*Config) error
+	callback    func(*Config, []string) error
 }
 
 type Config struct {
@@ -34,7 +34,15 @@ type RespLocationAreas struct {
 	} `json:"results"`
 }
 
-func commandMap(cfg *Config) error {
+type RespLocationArea struct {
+	PokemonEncounters []struct {
+		Pokemon struct {
+			Name string `json:"name"`
+		} `json:"pokemon"`
+	} `json:"pokemon_encounters"`
+}
+
+func commandMap(cfg *Config, args []string) error {
 	url := "https://pokeapi.co/api/v2/location-area/"
 	if cfg.next != "" {
 		url = cfg.next
@@ -82,7 +90,7 @@ func commandMap(cfg *Config) error {
 	return nil
 }
 
-func commandMapb(cfg *Config) error {
+func commandMapb(cfg *Config, args []string) error {
 	if cfg.previous == "" {
 		fmt.Println("you're on the first page")
 		return nil
@@ -130,6 +138,43 @@ func commandMapb(cfg *Config) error {
 	return nil
 }
 
+func commandExplore(cfg *Config, args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: explore <location_name>")
+	}
+
+	url := fmt.Sprintf("https://pokeapi.co/api/v2/location-area/%s", args[0])
+	var body []byte
+	if val, ok := cfg.cache.Get(url); ok {
+		body = val
+	} else {
+		res, err := http.Get(url)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+
+		body, err = io.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		cfg.cache.Add(url, body)
+	}
+
+	resStruct := RespLocationArea{}
+	err := json.Unmarshal(body, &resStruct)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Pokemon in %s:\n", args[0])
+	for _, pokemon := range resStruct.PokemonEncounters {
+		fmt.Println(pokemon.Pokemon.Name)
+	}
+
+	return nil
+}
+
 func getCommands() map[string]cliCommand {
 	return map[string]cliCommand{
 		"help": {
@@ -152,16 +197,21 @@ func getCommands() map[string]cliCommand {
 			description: "Lists the previous 20 location areas",
 			callback:    commandMapb,
 		},
+		"explore": {
+			name:        "explore <location_name>",
+			description: "Explore a location area to find Pokemon",
+			callback:    commandExplore,
+		},
 	}
 }
 
-func commandExit(cfg *Config) error {
+func commandExit(cfg *Config, args []string) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil
 }
 
-func commandHelp(cfg *Config) error {
+func commandHelp(cfg *Config, args []string) error {
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Println("Usage:")
 	fmt.Println()
@@ -195,7 +245,7 @@ func main() {
 			continue
 		}
 
-		err := command.callback(cfg)
+		err := command.callback(cfg, args[1:])
 		if err != nil {
 			fmt.Println(err)
 		}
