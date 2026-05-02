@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"sort"
 	"time"
 
 	pokecache "github.com/AaroLankinen/pokedex_cli/internal"
@@ -243,6 +244,48 @@ func commandCatch(cfg *Config, args []string) error {
 	return nil
 }
 
+func commandInspect(cfg *Config, args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: inspect <pokemon_name>")
+	}
+
+	name := args[0]
+	pokemon, ok := cfg.pokedex[name]
+	if !ok {
+		fmt.Println("You have not caught that pokemon!")
+		return nil
+	}
+
+	fmt.Printf("Name: %s\n", pokemon.Name)
+	fmt.Printf("Height: %d\n", pokemon.Height)
+	fmt.Printf("Weight: %d\n", pokemon.Weight)
+	fmt.Println("Stats:")
+	for _, stat := range pokemon.Stats {
+		fmt.Printf("  -%s: %d\n", stat.Stat.Name, stat.BaseStat)
+	}
+	fmt.Println("Types:")
+	for _, typeInfo := range pokemon.Types {
+		fmt.Printf("  - %s\n", typeInfo.Type.Name)
+	}
+
+	return nil
+}
+
+func commandPokedex(cfg *Config, args []string) error {
+	fmt.Println("Your Pokedex:")
+	names := make([]string, 0, len(cfg.pokedex))
+	for name := range cfg.pokedex {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+
+	for _, name := range names {
+		fmt.Printf(" - %s\n", name)
+	}
+	return nil
+}
+
 func getCommands() map[string]cliCommand {
 	return map[string]cliCommand{
 		"help": {
@@ -274,6 +317,16 @@ func getCommands() map[string]cliCommand {
 			name:        "catch <pokemon_name>",
 			description: "Attempt to catch a Pokemon",
 			callback:    commandCatch,
+		},
+		"inspect": {
+			name:        "inspect <pokemon_name>",
+			description: "View details of a caught Pokemon",
+			callback:    commandInspect,
+		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "View all caught Pokemon",
+			callback:    commandPokedex,
 		},
 	}
 }
