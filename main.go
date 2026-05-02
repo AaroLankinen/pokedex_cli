@@ -7,6 +7,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
+
+	pokecache "github.com/AaroLankinen/pokedex_cli/internal"
 )
 
 type cliCommand struct {
@@ -16,6 +19,7 @@ type cliCommand struct {
 }
 
 type Config struct {
+	cache    *pokecache.Cache
 	next     string
 	previous string
 }
@@ -36,19 +40,25 @@ func commandMap(cfg *Config) error {
 		url = cfg.next
 	}
 
-	res, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
+	var body []byte
+	if val, ok := cfg.cache.Get(url); ok {
+		body = val
+	} else {
+		res, err := http.Get(url)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
 
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return err
+		body, err = io.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		cfg.cache.Add(url, body)
 	}
 
 	resStruct := RespLocationAreas{}
-	err = json.Unmarshal(body, &resStruct)
+	err := json.Unmarshal(body, &resStruct)
 	if err != nil {
 		return err
 	}
@@ -78,19 +88,25 @@ func commandMapb(cfg *Config) error {
 		return nil
 	}
 
-	res, err := http.Get(cfg.previous)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
+	var body []byte
+	if val, ok := cfg.cache.Get(cfg.previous); ok {
+		body = val
+	} else {
+		res, err := http.Get(cfg.previous)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
 
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return err
+		body, err = io.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		cfg.cache.Add(cfg.previous, body)
 	}
 
 	resStruct := RespLocationAreas{}
-	err = json.Unmarshal(body, &resStruct)
+	err := json.Unmarshal(body, &resStruct)
 	if err != nil {
 		return err
 	}
@@ -156,7 +172,9 @@ func commandHelp(cfg *Config) error {
 }
 
 func main() {
-	cfg := &Config{}
+	cfg := &Config{
+		cache: pokecache.NewCache(5 * time.Minute),
+	}
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Println("Pokedex CLI")
 	for {
